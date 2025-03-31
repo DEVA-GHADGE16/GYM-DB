@@ -1,0 +1,139 @@
+CREATE DATABASE GymDB;
+USE GymDB;
+
+CREATE TABLE Members (
+    MemberID INT PRIMARY KEY AUTO_INCREMENT,
+    Name VARCHAR(100) NOT NULL,
+    Age INT CHECK (Age >= 12),
+    Gender ENUM('Male', 'Female', 'Other'),
+    JoinDate DATE NOT NULL DEFAULT (CURRENT_DATE),
+    MembershipType VARCHAR(50),
+    Contact VARCHAR(15) UNIQUE
+);
+
+CREATE TABLE Trainers (
+    TrainerID INT PRIMARY KEY AUTO_INCREMENT,
+    Name VARCHAR(100) NOT NULL,
+    Specialization VARCHAR(50),
+    Contact VARCHAR(15) UNIQUE
+);
+
+CREATE TABLE Workouts (
+    WorkoutID INT PRIMARY KEY AUTO_INCREMENT,
+    WorkoutName VARCHAR(100) NOT NULL,
+    Duration INT,  -- in minutes
+    DifficultyLevel ENUM('Beginner', 'Intermediate', 'Advanced')
+);
+
+CREATE TABLE Payments (
+    PaymentID INT PRIMARY KEY AUTO_INCREMENT,
+    MemberID INT,
+    Amount DECIMAL(10,2),
+    PaymentDate DATE NOT NULL DEFAULT (CURRENT_DATE),
+    Status ENUM('Paid', 'Pending'),
+    FOREIGN KEY (MemberID) REFERENCES Members(MemberID) ON DELETE CASCADE
+);
+
+CREATE INDEX idx_name ON Members(Name);
+CREATE INDEX idx_payment_status ON Payments(Status);
+
+DELIMITER //
+CREATE PROCEDURE AddMember(
+    IN p_Name VARCHAR(100),
+    IN p_Age INT,
+    IN p_Gender ENUM('Male', 'Female', 'Other'),
+    IN p_MembershipType VARCHAR(50),
+    IN p_Contact VARCHAR(15)
+)
+BEGIN
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+    BEGIN
+        ROLLBACK;
+        SELECT 'Error: Unable to add member' AS Message;
+    END;
+    
+    START TRANSACTION;
+    INSERT INTO Members (Name, Age, Gender, MembershipType, Contact)
+    VALUES (p_Name, p_Age, p_Gender, p_MembershipType, p_Contact);
+    COMMIT;
+END //
+DELIMITER ;
+
+DELIMITER //
+CREATE TRIGGER UpdatePaymentStatus
+AFTER INSERT ON Payments
+FOR EACH ROW
+BEGIN
+    IF NEW.Amount >= 500 THEN
+        UPDATE Payments SET Status = 'Paid' WHERE PaymentID = NEW.PaymentID;
+    ELSE
+        UPDATE Payments SET Status = 'Pending' WHERE PaymentID = NEW.PaymentID;
+    END IF;
+END //
+DELIMITER ;
+
+DELIMITER //
+CREATE PROCEDURE GetMembers()
+BEGIN
+    DECLARE done INT DEFAULT 0;
+    DECLARE member_name VARCHAR(100);
+    DECLARE member_type VARCHAR(50);
+    DECLARE cur CURSOR FOR SELECT Name, MembershipType FROM Members;
+    DECLARE CONTINUE HANDLER FOR NOT FOUND SET done = 1;
+    
+    OPEN cur;
+    member_loop: LOOP
+        FETCH cur INTO member_name, member_type;
+        IF done THEN
+            LEAVE member_loop;
+        END IF;
+        SELECT member_name AS Member, member_type AS Membership;
+    END LOOP;
+    CLOSE cur;
+END //
+DELIMITER ;
+
+
+Output:-
+mysql> SELECT * FROM Members;
++----------+-----------------+------+--------+------------+----------------+------------+
+| MemberID | Name            | Age  | Gender | JoinDate   | MembershipType | Contact    |
++----------+-----------------+------+--------+------------+----------------+------------+
+|        1 | SHIV JAMKHEDKAR |   25 | Male   | 2025-03-31 | Gold           | 9876543210 |
+|        2 | DEV             |   19 | Male   | 2025-03-31 | GOLD           | 7689543210 |
+|        3 | AKASH           |   29 | Male   | 2025-03-31 | GOLD           | 7689543256 |
+|        4 | PARTH           |   18 | Male   | 2025-03-31 | SILVER         | 9452617864 |
+|        5 | SHRAVANI        |   20 | Female | 2025-03-31 | SILVER         | 8654321098 |
+|        6 | JANHAVI         |   19 | Female | 2025-04-01 | GOLD           | 9876543201 |
+|        8 | RAJ KONDE       |   19 | Male   | 2025-04-01 | GOLD           | 9876543222 |
+|        9 | SUMEET MAPARI   |   20 | Male   | 2025-04-01 | GOLD           | 9876543212 |
++----------+-----------------+------+--------+------------+----------------+------------+
+8 rows in set (0.00 sec)
+mysql> SELECT * FROM Members WHERE MemberID = 2;
++----------+------+------+--------+------------+----------------+------------+
+| MemberID | Name | Age  | Gender | JoinDate   | MembershipType | Contact    |
++----------+------+------+--------+------------+----------------+------------+
+|        2 | DEV  |   19 | Male   | 2025-03-31 | GOLD           | 7689543210 |
++----------+------+------+--------+------------+----------------+------------+
+1 row in set (0.01 sec)
+
+mysql> SELECT * FROM Members WHERE MemberID = 6;
++----------+----------+------+--------+------------+----------------+------------+
+| MemberID | Name     | Age  | Gender | JoinDate   | MembershipType | Contact    |
++----------+----------+------+--------+------------+----------------+------------+
+|        6 | JANHAVI  |   19 | Female | 2025-04-01 | GOLD           | 9876543201 |
++----------+----------+------+--------+------------+----------------+------------+
+1 row in set (0.00 sec)
+
+mysql> SELECT * FROM Payments;
++-----------+----------+--------+-------------+---------+
+| PaymentID | MemberID | Amount | PaymentDate | Status  |
++-----------+----------+--------+-------------+---------+
+|         1 |     NULL | 600.00 | 2025-04-01  | Paid    |
+|         2 |     NULL | 300.00 | 2025-04-01  | Pending |
+|         3 |        1 | 700.00 | 2025-04-01  | Paid    |
+|         4 |        4 | 400.00 | 2025-04-01  | Pending |
+|         5 |        3 | 600.00 | 2025-04-01  | Paid    |
++-----------+----------+--------+-------------+---------+
+5 rows in set (0.00 sec)
+
